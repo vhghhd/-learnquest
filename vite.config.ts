@@ -4,6 +4,7 @@ import path from 'node:path'
 
 export default defineConfig({
   plugins: [vue()],
+  base: process.env.VITE_APP_BASE || '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
