@@ -1,0 +1,1 @@
+import{p as e,r as t,u as n,y as r}from"./index-CvPbYGqX.js";var i={},a={class:`min-h-screen bg-bg`};function o(t,i){return r(),e(`div`,a,[...i[0]||=[n(`div`,{class:`p-4 bg-white border-b border-rule`},[n(`h1`,{class:`text-xl font-bold`},`个人中心`)],-1),n(`div`,{class:`p-6`},[n(`p`,{class:`text-muted text-center`},`个人中心开发中...`)],-1)]])}var s=t(i,[[`render`,o]]);export{s as default};
