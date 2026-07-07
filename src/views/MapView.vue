@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-bg via-bg to-bg2 flex flex-col">
+  <div class="min-h-screen bg-black flex flex-col">
     <div class="p-4 bg-white/90 backdrop-blur-sm border-b border-rule">
       <div class="flex items-center justify-between max-w-6xl mx-auto">
         <div class="flex items-center gap-4">
@@ -37,9 +37,11 @@
         ref="containerRef"
         @wheel.prevent="handleWheel"
       >
-        <svg 
+        <svg
           :viewBox="viewBox"
-          class="max-w-full max-h-full"
+          width="100%"
+          height="100%"
+          preserveAspectRatio="xMidYMid meet"
           :style="{ transform: `scale(${currentScale})`, transformOrigin: 'center' }"
         >
           <defs>
@@ -62,7 +64,39 @@
                 <feMergeNode in="SourceGraphic"/>
               </feMerge>
             </filter>
+            <radialGradient id="starGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="1"/>
+              <stop offset="70%" stop-color="#e0e7ff" stop-opacity="0.8"/>
+              <stop offset="100%" stop-color="#a5b4fc" stop-opacity="0"/>
+            </radialGradient>
           </defs>
+
+          <g class="stars">
+            <circle
+              v-for="star in stars"
+              :key="`star-${star.id}`"
+              :cx="star.x"
+              :cy="star.y"
+              :r="star.r"
+              :fill="star.color"
+              :opacity="star.opacity"
+            >
+              <animate
+                attributeName="opacity"
+                :values="`${star.opacity * 0.3};${star.opacity};${star.opacity * 0.3}`"
+                :dur="`${star.duration}s`"
+                :begin="`${star.delay}s`"
+                repeatCount="indefinite"
+              />
+              <animate
+                attributeName="r"
+                :values="`${star.r * 0.8};${star.r * 1.2};${star.r * 0.8}`"
+                :dur="`${star.duration}s`"
+                :begin="`${star.delay}s`"
+                repeatCount="indefinite"
+              />
+            </circle>
+          </g>
 
           <g class="paths">
             <path
@@ -256,6 +290,7 @@ const userStore = useUserStore()
 const containerRef = ref<HTMLElement | null>(null)
 const currentScale = ref(1)
 const selectedNode = ref<MapNode | null>(null)
+const stars = ref<Array<{ id: number; x: number; y: number; r: number; color: string; opacity: number; duration: number; delay: number }>>([])
 
 const questTitle = computed(() => questStore.quest?.title ?? '冒险地图')
 const mapNodes = computed(() => questStore.mapNodes)
@@ -268,7 +303,8 @@ const coins = computed(() => userStore.coins)
 const bounds = computed(() => getMapBounds(mapNodes.value))
 const viewBox = computed(() => {
   const { minX, maxX, minY, maxY } = bounds.value
-  return `${minX} ${minY} ${maxX - minX} ${maxY - minY}`
+  const pad = 80
+  return `${minX - pad} ${minY - pad} ${maxX - minX + pad * 2} ${maxY - minY + pad * 2}`
 })
 
 const paths = computed(() => {
@@ -388,10 +424,39 @@ function handleWheel(event: WheelEvent) {
   currentScale.value = Math.max(0.5, Math.min(2, currentScale.value * delta))
 }
 
+function generateStars() {
+  const { minX, maxX, minY, maxY } = bounds.value
+  const width = maxX - minX
+  const height = maxY - minY
+  const count = Math.floor((width * height) / 3000)
+  const result: typeof stars.value = []
+  
+  for (let i = 0; i < count; i++) {
+    const size = Math.random() * 2 + 0.5
+    const intensity = Math.random()
+    const colors = ['#ffffff', '#ffffff', '#fef3c7', '#fde68a', '#fcd34d', '#fbbf24']
+    const color = colors[Math.floor(Math.random() * colors.length)]
+    
+    result.push({
+      id: i,
+      x: minX + Math.random() * width,
+      y: minY + Math.random() * height,
+      r: size,
+      color,
+      opacity: 0.5 + intensity * 0.5,
+      duration: 2 + Math.random() * 4,
+      delay: Math.random() * 5,
+    })
+  }
+  
+  stars.value = result
+}
+
 onMounted(() => {
   if (route.params.id) {
     questStore.loadFromStorage(route.params.id as string)
   }
+  generateStars()
 })
 </script>
 
@@ -411,5 +476,9 @@ onMounted(() => {
 
 svg {
   transition: transform 0.1s ease-out;
+}
+
+.stars circle {
+  pointer-events: none;
 }
 </style>
