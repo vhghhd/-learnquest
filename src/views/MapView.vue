@@ -75,22 +75,36 @@
             <circle
               v-for="star in stars"
               :key="`star-${star.id}`"
-              :cx="star.x"
-              :cy="star.y"
-              :r="star.r"
+              :cx="star.originX"
+              :cy="star.originY"
+              :r="0"
               :fill="star.color"
-              :opacity="star.opacity"
+              :opacity="0"
             >
               <animate
+                attributeName="cx"
+                :values="`${star.originX};${star.x}`"
+                :dur="`${star.duration}s`"
+                :begin="`${star.delay}s`"
+                repeatCount="indefinite"
+              />
+              <animate
+                attributeName="cy"
+                :values="`${star.originY};${star.y}`"
+                :dur="`${star.duration}s`"
+                :begin="`${star.delay}s`"
+                repeatCount="indefinite"
+              />
+              <animate
                 attributeName="opacity"
-                :values="`${star.opacity * 0.3};${star.opacity};${star.opacity * 0.3}`"
+                :values="`0;${star.opacity};${star.opacity};0`"
                 :dur="`${star.duration}s`"
                 :begin="`${star.delay}s`"
                 repeatCount="indefinite"
               />
               <animate
                 attributeName="r"
-                :values="`${star.r * 0.8};${star.r * 1.2};${star.r * 0.8}`"
+                :values="`0;${star.r};${star.r};0`"
                 :dur="`${star.duration}s`"
                 :begin="`${star.delay}s`"
                 repeatCount="indefinite"
@@ -290,7 +304,7 @@ const userStore = useUserStore()
 const containerRef = ref<HTMLElement | null>(null)
 const currentScale = ref(1)
 const selectedNode = ref<MapNode | null>(null)
-const stars = ref<Array<{ id: number; x: number; y: number; r: number; color: string; opacity: number; duration: number; delay: number }>>([])
+const stars = ref<Array<{ id: number; x: number; y: number; originX: number; originY: number; r: number; color: string; opacity: number; duration: number; delay: number; moveDistance: number; angle: number }>>([])
 
 const questTitle = computed(() => questStore.quest?.title ?? '冒险地图')
 const mapNodes = computed(() => questStore.mapNodes)
@@ -428,7 +442,9 @@ function generateStars() {
   const { minX, maxX, minY, maxY } = bounds.value
   const width = maxX - minX
   const height = maxY - minY
-  const count = Math.floor((width * height) / 3000)
+  const centerX = minX + width / 2
+  const centerY = minY + height / 3
+  const count = Math.floor((width * height) / 1500)
   const result: typeof stars.value = []
   
   for (let i = 0; i < count; i++) {
@@ -436,16 +452,26 @@ function generateStars() {
     const intensity = Math.random()
     const colors = ['#ffffff', '#ffffff', '#fef3c7', '#fde68a', '#fcd34d', '#fbbf24']
     const color = colors[Math.floor(Math.random() * colors.length)]
+    const angle = Math.random() * Math.PI * 2
+    const maxDistance = Math.max(width, height)
+    const moveDistance = Math.random() * maxDistance * 0.8
+    
+    const x = centerX + Math.cos(angle) * moveDistance
+    const y = centerY + Math.sin(angle) * moveDistance
     
     result.push({
       id: i,
-      x: minX + Math.random() * width,
-      y: minY + Math.random() * height,
+      x,
+      y,
+      originX: centerX,
+      originY: centerY,
       r: size,
       color,
       opacity: 0.5 + intensity * 0.5,
-      duration: 2 + Math.random() * 4,
+      duration: 5 + Math.random() * 8,
       delay: Math.random() * 5,
+      moveDistance,
+      angle,
     })
   }
   
