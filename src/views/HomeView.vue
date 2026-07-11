@@ -5,7 +5,16 @@
       <p class="text-muted mb-8">将任意知识变成一场冒险</p>
       
       <div class="bg-white rounded-2xl p-8 shadow-md max-w-lg w-full">
-        <h2 class="text-xl font-bold mb-4">开始新冒险</h2>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-bold">开始新冒险</h2>
+          <button
+            class="text-sm text-muted hover:text-accent transition-colors flex items-center gap-1"
+            @click="showSettings = true"
+          >
+            <span>⚙️</span>
+            <span>API 设置</span>
+          </button>
+        </div>
         
         <div v-if="!isGenerating" class="space-y-4">
           <textarea
@@ -32,6 +41,10 @@
           >
             生成冒险
           </button>
+
+          <div class="text-xs text-center text-muted">
+            {{ apiKeyConfigured ? '🤖 使用 DeepSeek AI 生成' : '⚠️ 未配置 API Key，将使用示例数据' }}
+          </div>
         </div>
         
         <div v-else class="py-12">
@@ -67,15 +80,56 @@
           <div class="text-sm text-muted">每学习包</div>
         </div>
       </div>
+
+      <div v-if="savedQuests.length > 0" class="mt-8 max-w-lg w-full">
+        <h2 class="text-lg font-bold text-ink mb-4 text-left">我的题库</h2>
+        <div class="space-y-3">
+          <div
+            v-for="q in savedQuests"
+            :key="q.id"
+            class="bg-white rounded-xl p-4 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow"
+          >
+            <div class="flex-1 text-left cursor-pointer" @click="continueQuest(q.id)">
+              <div class="font-medium text-ink">{{ q.title }}</div>
+              <div class="text-xs text-muted mt-1 flex items-center gap-3">
+                <span>{{ formatDate(q.createdAt) }}</span>
+                <span>{{ q.nodeCount }} 个节点</span>
+                <span>{{ q.questionCount }} 题</span>
+                <span class="text-accent">{{ q.completedCount }}/{{ q.nodeCount }} 已通关</span>
+              </div>
+            </div>
+            <button
+              class="ml-3 text-muted hover:text-danger transition-colors text-sm"
+              @click.stop="removeQuest(q.id)"
+            >
+              删除
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="showSettings"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        @click.self="handleSettingsClose"
+      >
+        <DeepSeekSettings
+          @close="handleSettingsClose"
+          @change="(has) => { apiKeyConfigured = has }"
+        />
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuestStore } from '@/stores/quest.store'
-import { simulateAIGeneration } from '@/utils/mockData'
+import { generateQuest, hasApiKey } from '@/utils/deepseekApi'
+import DeepSeekSettings from '@/components/DeepSeekSettings.vue'
 import { AI_CONFIG, ROUTES } from '@/utils/constants'
 
 const router = useRouter()
@@ -85,7 +139,34 @@ const content = ref('')
 const isGenerating = ref(false)
 const progress = ref(0)
 const currentStage = ref('')
+const showSettings = ref(false)
+const apiKeyConfigured = ref(hasApiKey())
 const MAX_CONTENT_LENGTH = AI_CONFIG.MAX_CONTENT_LENGTH
+
+const savedQuests = computed(() => questStore.savedQuests)
+
+function formatDate(ts: number): string {
+  const d = new Date(ts)
+  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+}
+
+function continueQuest(questId: string) {
+  if (questStore.loadQuest(questId)) {
+    router.push(ROUTES.QUEST_MAP(questId))
+  } else {
+    alert('加载题库失败')
+  }
+}
+
+function removeQuest(questId: string) {
+  if (confirm('确定删除这个题库吗？')) {
+    questStore.deleteQuest(questId)
+  }
+}
+
+onMounted(() => {
+  questStore.loadSavedQuests()
+})
 
 const EXAMPLE_CONTENT = `学习是一个主动构建知识的过程。建构主义学习理论认为，学习者不是被动地接受知识，而是通过与环境的交互主动构建自己的理解。学习的本质是通过经验引起的认知或行为的持久改变。
 
@@ -99,28 +180,34 @@ function loadExampleContent() {
   content.value = EXAMPLE_CONTENT
 }
 
+function handleSettingsClose() {
+  showSettings.value = false
+  apiKeyConfigured.value = hasApiKey()
+}
+
 async function createQuest() {
   if (!content.value.trim() || content.value.length < 10) return
-  
+
   isGenerating.value = true
   progress.value = 0
-  
+  apiKeyConfigured.value = hasApiKey()
+
   try {
-    const quest = await simulateAIGeneration(
+    const quest = await generateQuest(
       content.value,
       (stage, p) => {
         currentStage.value = stage
         progress.value = p
       }
     )
-    
+
     questStore.setQuest(quest)
     questStore.saveToStorage()
-    
+
     await router.push(ROUTES.QUEST_MAP(quest.id))
   } catch (error) {
     console.error('Failed to create quest:', error)
-    alert('生成失败，请重试')
+    alert('生成失败：' + (error instanceof Error ? error.message : '未知错误'))
   } finally {
     isGenerating.value = false
     progress.value = 0

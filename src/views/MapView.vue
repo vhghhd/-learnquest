@@ -15,9 +15,13 @@
           </div>
         </div>
         <div class="flex items-center gap-4">
-          <div class="flex items-center gap-1">
+          <div
+            class="flex items-center gap-1 cursor-pointer hover:bg-bg2 px-2 py-1 rounded-lg transition-colors"
+            @click="showHeartDialog = true"
+          >
             <span class="text-xl">❤️</span>
             <span class="font-bold text-danger">{{ hearts }}</span>
+            <span v-if="heartCountdown" class="text-xs text-muted ml-1">{{ heartCountdown }}</span>
           </div>
           <div class="flex items-center gap-1">
             <span class="text-xl">⭐</span>
@@ -284,16 +288,63 @@
         </div>
       </div>
     </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="showHeartDialog"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        @click.self="showHeartDialog = false"
+      >
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-ink">爱心恢复</h3>
+            <button class="text-muted hover:text-ink" @click="showHeartDialog = false">✕</button>
+          </div>
+
+          <div class="text-center mb-6">
+            <div class="text-5xl mb-3">❤️</div>
+            <div class="text-2xl font-bold text-danger mb-1">{{ hearts }} / {{ maxHearts }}</div>
+            <p v-if="heartCountdown" class="text-sm text-muted">
+              下一颗爱心恢复：{{ heartCountdown }}
+            </p>
+            <p v-else class="text-sm text-accent2">爱心已满</p>
+          </div>
+
+          <div class="bg-bg2 rounded-xl p-4 mb-4 space-y-2 text-sm">
+            <div class="flex items-center gap-2 text-muted">
+              <span>⏰</span>
+              <span>每 {{ recoveryMinutes }} 分钟自动恢复 1 颗爱心</span>
+            </div>
+            <div class="flex items-center gap-2 text-muted">
+              <span>💰</span>
+              <span>花费 {{ heartCostCoins }} 金币立即恢复 1 颗爱心</span>
+            </div>
+          </div>
+
+          <button
+            class="w-full py-3 bg-accent text-white rounded-xl font-bold hover:bg-accent-dark transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            :disabled="hearts >= maxHearts || coins < heartCostCoins"
+            @click="handleBuyHeart"
+          >
+            {{ hearts >= maxHearts ? '爱心已满' : `花费 ${heartCostCoins} 💰 恢复 1 颗爱心` }}
+          </button>
+
+          <p v-if="buyHeartMsg" class="text-center text-sm mt-3" :class="buyHeartOk ? 'text-accent2' : 'text-danger'">
+            {{ buyHeartMsg }}
+          </p>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuestStore } from '@/stores/quest.store'
 import { useUserStore } from '@/stores/user.store'
 import { generateMapPath, getMapBounds } from '@/utils/mapLayout'
-import { ROUTES } from '@/utils/constants'
+import { ROUTES, GAME_CONFIG } from '@/utils/constants'
 import type { MapNode, MapPath } from '@/types/quest.types'
 
 const route = useRoute()
@@ -304,7 +355,17 @@ const userStore = useUserStore()
 const containerRef = ref<HTMLElement | null>(null)
 const currentScale = ref(1)
 const selectedNode = ref<MapNode | null>(null)
+const showHeartDialog = ref(false)
+const buyHeartMsg = ref('')
+const buyHeartOk = ref(false)
+const heartTick = ref(0)
+let heartTimer: ReturnType<typeof setInterval> | null = null
+
 const stars = ref<Array<{ id: number; x: number; y: number; originX: number; originY: number; r: number; color: string; opacity: number; duration: number; delay: number; moveDistance: number; angle: number }>>([])
+
+const maxHearts = GAME_CONFIG.MAX_HEARTS
+const recoveryMinutes = GAME_CONFIG.HEART_RECOVERY_MINUTES
+const heartCostCoins = GAME_CONFIG.HEART_COST_COINS
 
 const questTitle = computed(() => questStore.quest?.title ?? '冒险地图')
 const mapNodes = computed(() => questStore.mapNodes)
@@ -313,6 +374,28 @@ const nodeStatusMap = computed(() => questStore.nodeStatusMap)
 const hearts = computed(() => userStore.hearts)
 const xp = computed(() => userStore.xp)
 const coins = computed(() => userStore.coins)
+
+const heartCountdown = computed(() => {
+  heartTick.value
+  const ms = userStore.nextHeartRecoveryMs
+  if (ms <= 0) return ''
+  const totalSec = Math.ceil(ms / 1000)
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+})
+
+function handleBuyHeart() {
+  const result = userStore.buyHeart()
+  buyHeartOk.value = result.ok
+  buyHeartMsg.value = result.ok ? '恢复成功！' : (result.reason ?? '失败')
+  userStore.saveToStorage()
+  if (result.ok) {
+    setTimeout(() => {
+      buyHeartMsg.value = ''
+    }, 2000)
+  }
+}
 
 const bounds = computed(() => getMapBounds(mapNodes.value))
 const viewBox = computed(() => {
@@ -483,6 +566,18 @@ onMounted(() => {
     questStore.loadFromStorage(route.params.id as string)
   }
   generateStars()
+
+  userStore.checkHeartRecovery()
+  heartTimer = setInterval(() => {
+    heartTick.value++
+    userStore.checkHeartRecovery()
+  }, 1000)
+})
+
+onUnmounted(() => {
+  if (heartTimer) {
+    clearInterval(heartTimer)
+  }
 })
 </script>
 

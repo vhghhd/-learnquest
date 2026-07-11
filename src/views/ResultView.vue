@@ -39,7 +39,7 @@
         </div>
       </div>
 
-      <div class="bg-gradient-to-r from-accent-light to-accent2-light rounded-2xl p-6 mb-8">
+      <div v-if="passed" class="bg-gradient-to-r from-accent-light to-accent2-light rounded-2xl p-6 mb-8">
         <h3 class="font-bold text-ink mb-4">获得奖励</h3>
         <div class="flex justify-center gap-6">
           <div class="flex items-center gap-2">
@@ -113,13 +113,14 @@ const userStore = useUserStore()
 
 const levelId = computed(() => route.params.levelId as string)
 const questId = computed(() => route.params.id as string)
+const passed = computed(() => route.query.passed === '1')
 
 const mapNode = computed(() => questStore.mapNodes.find(n => n.id === levelId.value))
 const levelProgress = computed(() => questStore.getLevelProgress(levelId.value))
 
-const stars = computed(() => levelProgress.value?.stars ?? 0)
-const score = computed(() => levelProgress.value?.bestScore ?? 0)
-const timeSpent = computed(() => levelProgress.value?.bestTime ?? 0)
+const stars = computed(() => passed.value ? (levelProgress.value?.stars ?? 0) : 0)
+const score = computed(() => levelStore.score)
+const timeSpent = computed(() => Math.floor(levelStore.elapsedTime / 1000))
 const correctCount = computed(() => levelStore.correctCount)
 const totalQuestions = computed(() => levelStore.totalQuestions)
 
@@ -129,19 +130,20 @@ const accuracy = computed(() => {
 })
 
 const xpReward = computed(() => {
+  if (!passed.value) return 0
   let base = mapNode.value?.reward.xp ?? 0
   if (stars.value === 3) base += GAME_CONFIG.THREE_STAR_XP_BONUS
   if (!questStore.isLevelCompleted(levelId.value)) base += GAME_CONFIG.FIRST_CLEAR_XP_BONUS
   return base
 })
 
-const coinReward = computed(() => mapNode.value?.reward.coins ?? 0)
+const coinReward = computed(() => passed.value ? (mapNode.value?.reward.coins ?? 0) : 0)
 
 const collectedFragmentCount = computed(() => questStore.collectedFragments.length)
 const totalFragmentCount = computed(() => questStore.allFragments.length)
 
 const hasNextLevel = computed(() => {
-  if (!mapNode.value) return false
+  if (!passed.value || !mapNode.value) return false
   return mapNode.value.unlocks.length > 0 && 
          mapNode.value.unlocks.some(id => questStore.nodeStatusMap.get(id) === 'available')
 })
@@ -186,15 +188,15 @@ function goNextLevel() {
 }
 
 onMounted(() => {
-  if (mapNode.value) {
-    for (const fragId of mapNode.value.reward.fragments) {
-      questStore.collectFragment(fragId)
-    }
-    
-    userStore.addXP(xpReward.value)
-    userStore.addCoins(coinReward.value)
-    userStore.saveToStorage()
-    questStore.saveToStorage()
+  if (!passed.value || !mapNode.value) return
+
+  for (const fragId of mapNode.value.reward.fragments) {
+    questStore.collectFragment(fragId)
   }
+
+  userStore.addXP(xpReward.value)
+  userStore.addCoins(coinReward.value)
+  userStore.saveToStorage()
+  questStore.saveToStorage()
 })
 </script>

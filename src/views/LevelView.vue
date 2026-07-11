@@ -99,18 +99,18 @@
 
         <div v-if="showFeedback" class="flex justify-end">
           <button
-            v-if="!isFinished"
-            class="px-8 py-3 bg-accent text-white rounded-xl font-bold hover:bg-accent-dark transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-            @click="goNext"
-          >
-            {{ isLastQuestion ? '查看结果' : '下一题' }}
-          </button>
-          <button
-            v-else
+            v-if="isLastQuestion"
             class="px-8 py-3 bg-accent text-white rounded-xl font-bold hover:bg-accent-dark transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             @click="goResult"
           >
             查看结果
+          </button>
+          <button
+            v-else
+            class="px-8 py-3 bg-accent text-white rounded-xl font-bold hover:bg-accent-dark transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+            @click="goNext"
+          >
+            下一题
           </button>
         </div>
       </div>
@@ -236,15 +236,23 @@ function goNext() {
 }
 
 function goResult() {
+  levelStore.finishLevel()
+  const passed = levelStore.isPassed
   const stars = levelStore.calculateStars()
-  questStore.completeLevel(
-    route.params.levelId as string,
-    stars,
-    levelStore.score,
-    Math.floor(levelStore.elapsedTime / 1000)
-  )
-  
-  router.push(ROUTES.QUEST_RESULT(route.params.id as string, route.params.levelId as string))
+
+  if (passed) {
+    questStore.completeLevel(
+      route.params.levelId as string,
+      stars,
+      levelStore.score,
+      Math.floor(levelStore.elapsedTime / 1000)
+    )
+  }
+
+  router.push({
+    path: ROUTES.QUEST_RESULT(route.params.id as string, route.params.levelId as string),
+    query: { passed: passed ? '1' : '0' },
+  })
 }
 
 function goBack() {

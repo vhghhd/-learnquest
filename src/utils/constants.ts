@@ -39,6 +39,7 @@ export const AI_CONFIG = {
   MAX_RETRIES: 2,
   BATCH_SIZE: 5,
   MODEL_NAME: 'deepseek-chat',
+  API_BASE_URL: 'https://api.deepseek.com/v1',
 } as const
 
 export const MAP_CONFIG = {

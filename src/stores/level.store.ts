@@ -26,6 +26,13 @@ export const useLevelStore = defineStore('level', () => {
     return ((currentQuestionIndex.value + 1) / totalQuestions.value) * 100
   })
   const elapsedTime = computed(() => Date.now() - startTime.value)
+  const isPassed = computed(() => {
+    if (!isFinished.value) return false
+    if (heartsRemaining.value <= 0) return false
+    if (totalQuestions.value === 0) return false
+    const accuracy = correctCount.value / totalQuestions.value
+    return accuracy >= GAME_CONFIG.STAR_THRESHOLDS.ONE_STAR
+  })
 
   function startLevel(levelId: string, questionList: Question[], hearts: number) {
     console.debug('[levelStore] 🎮 startLevel:', {
@@ -195,6 +202,7 @@ export const useLevelStore = defineStore('level', () => {
     totalQuestions,
     progress,
     elapsedTime,
+    isPassed,
     startLevel,
     submitAnswer,
     nextQuestion,

@@ -2,12 +2,25 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Quest, MapNode, LevelProgress } from '@/types/quest.types'
 
+export interface QuestMeta {
+  id: string
+  title: string
+  createdAt: number
+  nodeCount: number
+  questionCount: number
+  completedCount: number
+}
+
+const QUEST_LIST_KEY = 'lq_quest_list'
+const QUEST_DATA_PREFIX = 'lq_quest_data_'
+
 export const useQuestStore = defineStore('quest', () => {
   const currentQuestId = ref<string | null>(null)
   const quest = ref<Quest | null>(null)
   const completedLevels = ref<LevelProgress[]>([])
   const collectedFragments = ref<string[]>([])
   const unlockedLevels = ref<string[]>([])
+  const savedQuests = ref<QuestMeta[]>([])
 
   const mapNodes = computed<MapNode[]>(() => quest.value?.mapConfig.nodes ?? [])
   const allQuestions = computed(() => quest.value?.questions ?? [])
@@ -57,14 +70,87 @@ export const useQuestStore = defineStore('quest', () => {
       knowledgeNodes: questData.knowledgeNodes.length,
       questions: questData.questions.length,
     })
-    
+
     quest.value = questData
     currentQuestId.value = questData.id
     if (questData.mapConfig.startingNode) {
       unlockedLevels.value = [questData.mapConfig.startingNode]
       console.debug('[questStore] 🚪 Starting node unlocked:', questData.mapConfig.startingNode)
     }
+    saveQuestData(questData)
     saveToStorage()
+  }
+
+  function saveQuestData(questData: Quest) {
+    localStorage.setItem(`${QUEST_DATA_PREFIX}${questData.id}`, JSON.stringify(questData))
+
+    const existing = savedQuests.value.find(q => q.id === questData.id)
+    const meta: QuestMeta = {
+      id: questData.id,
+      title: questData.title,
+      createdAt: questData.createdAt,
+      nodeCount: questData.mapConfig.nodes.length,
+      questionCount: questData.questions.length,
+      completedCount: existing?.completedCount ?? 0,
+    }
+
+    if (existing) {
+      Object.assign(existing, meta)
+    } else {
+      savedQuests.value.unshift(meta)
+    }
+    localStorage.setItem(QUEST_LIST_KEY, JSON.stringify(savedQuests.value))
+  }
+
+  function loadSavedQuests() {
+    const raw = localStorage.getItem(QUEST_LIST_KEY)
+    if (!raw) {
+      savedQuests.value = []
+      return
+    }
+    try {
+      const list = JSON.parse(raw) as QuestMeta[]
+      savedQuests.value = list.map(meta => {
+        const progressRaw = localStorage.getItem(`lq_quest_${meta.id}`)
+        let completedCount = 0
+        if (progressRaw) {
+          try {
+            const progress = JSON.parse(progressRaw)
+            completedCount = progress.completedLevels?.length ?? 0
+          } catch { /* ignore */ }
+        }
+        return { ...meta, completedCount }
+      })
+    } catch (e) {
+      console.error('[questStore] Failed to load quest list:', e)
+      savedQuests.value = []
+    }
+  }
+
+  function loadQuest(questId: string): boolean {
+    const raw = localStorage.getItem(`${QUEST_DATA_PREFIX}${questId}`)
+    if (!raw) return false
+    try {
+      const questData = JSON.parse(raw) as Quest
+      quest.value = questData
+      currentQuestId.value = questId
+      loadFromStorage(questId)
+      return true
+    } catch (e) {
+      console.error('[questStore] Failed to load quest data:', e)
+      return false
+    }
+  }
+
+  function deleteQuest(questId: string) {
+    localStorage.removeItem(`${QUEST_DATA_PREFIX}${questId}`)
+    localStorage.removeItem(`lq_quest_${questId}`)
+    savedQuests.value = savedQuests.value.filter(q => q.id !== questId)
+    localStorage.setItem(QUEST_LIST_KEY, JSON.stringify(savedQuests.value))
+
+    if (currentQuestId.value === questId) {
+      $reset()
+    }
   }
 
   function completeLevel(levelId: string, stars: number, score: number, time: number) {
@@ -127,6 +213,13 @@ export const useQuestStore = defineStore('quest', () => {
     }
 
     saveToStorage()
+
+    const meta = savedQuests.value.find(q => q.id === currentQuestId.value)
+    if (meta) {
+      meta.completedCount = completedLevels.value.length
+      localStorage.setItem(QUEST_LIST_KEY, JSON.stringify(savedQuests.value))
+    }
+
     console.debug('[questStore] ✅ completeLevel finished:', {
       totalCompleted: completedLevels.value.length,
       totalUnlocked: unlockedLevels.value.length,
@@ -201,6 +294,7 @@ export const useQuestStore = defineStore('quest', () => {
     completedLevels,
     collectedFragments,
     unlockedLevels,
+    savedQuests,
     mapNodes,
     allQuestions,
     allFragments,
@@ -212,6 +306,9 @@ export const useQuestStore = defineStore('quest', () => {
     getLevelProgress,
     saveToStorage,
     loadFromStorage,
+    loadSavedQuests,
+    loadQuest,
+    deleteQuest,
     $reset,
   }
 })

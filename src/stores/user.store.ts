@@ -3,10 +3,12 @@ import { ref, computed } from 'vue'
 import type { AvatarConfig } from '@/types/user.types'
 import { GAME_CONFIG } from '@/utils/constants'
 
+const RECOVERY_INTERVAL = GAME_CONFIG.HEART_RECOVERY_MINUTES * 60 * 1000
+
 export const useUserStore = defineStore('user', () => {
   const level = ref(1)
   const xp = ref(0)
-  const hearts = ref(GAME_CONFIG.INITIAL_HEARTS)
+  const hearts = ref<number>(GAME_CONFIG.INITIAL_HEARTS)
   const coins = ref(0)
   const streak = ref(0)
   const lastPlayDate = ref('')
@@ -15,6 +17,7 @@ export const useUserStore = defineStore('user', () => {
   const totalStudyTime = ref(0)
   const avatar = ref<AvatarConfig>({})
   const achievements = ref<string[]>([])
+  const lastHeartLossTime = ref<number>(0)
 
   const xpToNextLevel = computed(() => {
     return Math.floor(
@@ -31,6 +34,13 @@ export const useUserStore = defineStore('user', () => {
     return (totalCorrectAnswers.value / totalQuestionsAnswered.value) * 100
   })
 
+  const nextHeartRecoveryMs = computed(() => {
+    if (hearts.value >= GAME_CONFIG.MAX_HEARTS || lastHeartLossTime.value === 0) return 0
+    const elapsed = Date.now() - lastHeartLossTime.value
+    const remaining = RECOVERY_INTERVAL - (elapsed % RECOVERY_INTERVAL)
+    return remaining
+  })
+
   function addXP(amount: number) {
     xp.value += amount
     while (xp.value >= xpToNextLevel.value) {
@@ -42,7 +52,45 @@ export const useUserStore = defineStore('user', () => {
   function loseHeart() {
     if (hearts.value > 0) {
       hearts.value--
+      if (lastHeartLossTime.value === 0) {
+        lastHeartLossTime.value = Date.now()
+      }
     }
+  }
+
+  function checkHeartRecovery() {
+    if (hearts.value >= GAME_CONFIG.MAX_HEARTS || lastHeartLossTime.value === 0) {
+      return
+    }
+
+    const elapsed = Date.now() - lastHeartLossTime.value
+    const recovered = Math.floor(elapsed / RECOVERY_INTERVAL)
+
+    if (recovered > 0) {
+      const newHearts = Math.min(GAME_CONFIG.MAX_HEARTS, hearts.value + recovered)
+      const actualRecovered = newHearts - hearts.value
+      hearts.value = newHearts
+
+      if (hearts.value >= GAME_CONFIG.MAX_HEARTS) {
+        lastHeartLossTime.value = 0
+      } else {
+        lastHeartLossTime.value += actualRecovered * RECOVERY_INTERVAL
+      }
+    }
+  }
+
+  function buyHeart(): { ok: boolean; reason?: string } {
+    if (hearts.value >= GAME_CONFIG.MAX_HEARTS) {
+      return { ok: false, reason: '爱心已满' }
+    }
+    if (!spendCoins(GAME_CONFIG.HEART_COST_COINS)) {
+      return { ok: false, reason: '金币不足' }
+    }
+    hearts.value++
+    if (hearts.value >= GAME_CONFIG.MAX_HEARTS) {
+      lastHeartLossTime.value = 0
+    }
+    return { ok: true }
   }
 
   function addCoins(amount: number) {
@@ -91,6 +139,7 @@ export const useUserStore = defineStore('user', () => {
       totalStudyTime: totalStudyTime.value,
       avatar: avatar.value,
       achievements: achievements.value,
+      lastHeartLossTime: lastHeartLossTime.value,
     }
     localStorage.setItem('lq_user', JSON.stringify(data))
   }
@@ -111,6 +160,8 @@ export const useUserStore = defineStore('user', () => {
         totalStudyTime.value = data.totalStudyTime ?? 0
         avatar.value = data.avatar ?? {}
         achievements.value = data.achievements ?? []
+        lastHeartLossTime.value = data.lastHeartLossTime ?? 0
+        checkHeartRecovery()
       } catch (e) {
         console.error('Failed to load user data:', e)
       }
@@ -129,6 +180,7 @@ export const useUserStore = defineStore('user', () => {
     totalStudyTime.value = 0
     avatar.value = {}
     achievements.value = []
+    lastHeartLossTime.value = 0
   }
 
   return {
@@ -143,11 +195,15 @@ export const useUserStore = defineStore('user', () => {
     totalStudyTime,
     avatar,
     achievements,
+    lastHeartLossTime,
     xpToNextLevel,
     xpProgress,
     accuracyRate,
+    nextHeartRecoveryMs,
     addXP,
     loseHeart,
+    checkHeartRecovery,
+    buyHeart,
     addCoins,
     spendCoins,
     recordAnswer,
