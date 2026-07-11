@@ -1,0 +1,1 @@
+import{b as e,p as t,r as n,u as r}from"./index-CxR6ialx.js";var i={},a={class:`min-h-screen bg-bg`};function o(n,i){return e(),t(`div`,a,[...i[0]||=[r(`div`,{class:`p-4 bg-white border-b border-rule`},[r(`h1`,{class:`text-xl font-bold`},`个人中心`)],-1),r(`div`,{class:`p-6`},[r(`p`,{class:`text-muted text-center`},`个人中心开发中...`)],-1)]])}var s=n(i,[[`render`,o]]);export{s as default};
